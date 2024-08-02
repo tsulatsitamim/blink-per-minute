@@ -10,6 +10,8 @@ from imutils import face_utils
 import dlib
 import os
 import time
+import shutil
+import subprocess
 
 def eye_aspect_ratio(eye):
     A = dist.euclidean(eye[1], eye[5])
@@ -49,6 +51,29 @@ class BlinkDetectorApp(QWidget):
         self.start_time = None
         self.total_frames = 0
 
+    def delete_existing_output(self):
+        if os.path.exists(blinks_dir):
+            for file in os.listdir(blinks_dir):
+                file_path = os.path.join(blinks_dir, file)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    print(f"Error deleting {file_path}: {e}")
+
+    def browse_output(self):
+        if os.path.exists(blinks_dir):
+            if sys.platform == "win32":
+                os.startfile(blinks_dir)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", blinks_dir])
+            else:
+                subprocess.Popen(["xdg-open", blinks_dir])
+        else:
+            print("Output directory does not exist.")
+
     def initUI(self):
         self.setWindowTitle('Blink Detector')
         self.setGeometry(100, 100, 800, 600)
@@ -68,7 +93,7 @@ class BlinkDetectorApp(QWidget):
         self.threshold_slider.setValue(15)
         self.threshold_slider.valueChanged.connect(self.update_threshold)
         threshold_layout.addWidget(self.threshold_slider)
-        self.threshold_label = QLabel('0.15' + blinks_dir)
+        self.threshold_label = QLabel('0.15')
         threshold_layout.addWidget(self.threshold_label)
         layout.addLayout(threshold_layout)
 
@@ -85,6 +110,11 @@ class BlinkDetectorApp(QWidget):
         self.frame_progress_label = QLabel('Frame: 0 / 0')
         layout.addWidget(self.frame_progress_label)
 
+        # Browse output button
+        self.browse_output_btn = QPushButton('Browse Output')
+        self.browse_output_btn.clicked.connect(self.browse_output)
+        layout.addWidget(self.browse_output_btn)
+
         self.setLayout(layout)
 
     def upload_video(self):
@@ -100,6 +130,7 @@ class BlinkDetectorApp(QWidget):
         if not self.video_path:
             return
         
+        self.delete_existing_output()
         self.cap = cv2.VideoCapture(self.video_path)
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.start_time = time.time()
