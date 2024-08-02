@@ -23,6 +23,9 @@ if getattr(sys, 'frozen', False):
 else:
     bundle_dir = os.path.abspath(os.path.dirname(__file__))
 
+blinks_dir = os.path.join(bundle_dir, 'blinks')
+os.makedirs(blinks_dir, exist_ok=True)
+
 class BlinkDetectorApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -44,6 +47,7 @@ class BlinkDetectorApp(QWidget):
         self.COUNTER = 0
         self.TOTAL = 0
         self.start_time = None
+        self.total_frames = 0
 
     def initUI(self):
         self.setWindowTitle('Blink Detector')
@@ -64,7 +68,7 @@ class BlinkDetectorApp(QWidget):
         self.threshold_slider.setValue(15)
         self.threshold_slider.valueChanged.connect(self.update_threshold)
         threshold_layout.addWidget(self.threshold_slider)
-        self.threshold_label = QLabel('0.15')
+        self.threshold_label = QLabel('0.15' + blinks_dir)
         threshold_layout.addWidget(self.threshold_label)
         layout.addLayout(threshold_layout)
 
@@ -76,6 +80,10 @@ class BlinkDetectorApp(QWidget):
         # Video display
         self.video_label = QLabel()
         layout.addWidget(self.video_label)
+
+        # add progress
+        self.frame_progress_label = QLabel('Frame: 0 / 0')
+        layout.addWidget(self.frame_progress_label)
 
         self.setLayout(layout)
 
@@ -93,6 +101,7 @@ class BlinkDetectorApp(QWidget):
             return
         
         self.cap = cv2.VideoCapture(self.video_path)
+        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.start_time = time.time()
         self.timer.start(30)  # Update every 30 ms
 
@@ -101,6 +110,9 @@ class BlinkDetectorApp(QWidget):
         if not ret:
             self.timer.stop()
             return
+        
+        current_frame = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+        self.frame_progress_label.setText(f'Frame: {current_frame} / {self.total_frames}')
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
@@ -115,17 +127,6 @@ class BlinkDetectorApp(QWidget):
             rightEAR = eye_aspect_ratio(rightEye)
             ear = (leftEAR + rightEAR) / 2.0
 
-            if ear < self.EYE_AR_THRESH:
-                self.COUNTER += 1
-            else:
-                if self.COUNTER >= self.EYE_AR_CONSEC_FRAMES:
-                    self.TOTAL += 1
-                    # Save the frame as an image when blink is detected
-                    timestamp = time.strftime("%Y%m%d-%H%M%S")
-                    img_filename = f"blink_{timestamp}.png"
-                    cv2.imwrite(img_filename, cvv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-                self.COUNTER = 0
-
             cv2.putText(frame, f"Blinks: {self.TOTAL}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             cv2.putText(frame, f"EAR: {ear:.2f}", (300, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
@@ -134,16 +135,27 @@ class BlinkDetectorApp(QWidget):
             cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
             cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
 
-        # Resize the frame to width 650 while maintaining aspect ratio
+            if ear < self.EYE_AR_THRESH:
+                self.COUNTER += 1
+            else:
+                if self.COUNTER >= self.EYE_AR_CONSEC_FRAMES:
+                    self.TOTAL += 1
+                    # Save the frame as an image when blink is detected
+                    timestamp = time.strftime("%Y%m%d-%H%M%S")
+                    img_filename = os.path.join(blinks_dir, f"blink_{timestamp}.png")
+                    cv2.imwrite(img_filename, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+                self.COUNTER = 0
+
+        # Resize the frame to width 450 while maintaining aspect ratio
         height, width, _ = frame.shape
         aspect_ratio = height / width
-        new_width = 650
+        new_width = 900
         new_height = int(new_width * aspect_ratio)
         resized_frame = cv2.resize(frame, (new_width, new_height))
 
-        current_time = int(time.time() - self.start_time)
-        minutes, seconds = divmod(current_time, 60)
-        time_str = f"{minutes:02d}:{seconds:02d}"
+        # current_time = int(time.time() - self.start_time)
+        # minutes, seconds = divmod(current_time, 60)
+        # time_str = f"{minutes:02d}:{seconds:02d}"
         # cv2.putText(resized_frame, f"Time: {time_str}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         h, w, ch = resized_frame.shape
