@@ -13,6 +13,12 @@ import time
 import shutil
 import subprocess
 
+from moviepy.editor import VideoFileClip
+
+def get_video_length(file_path):
+    clip = VideoFileClip(file_path)
+    return clip.duration
+
 def eye_aspect_ratio(eye):
     A = dist.euclidean(eye[1], eye[5])
     B = dist.euclidean(eye[2], eye[4])
@@ -34,6 +40,7 @@ class BlinkDetectorApp(QWidget):
         self.initUI()
         
         self.video_path = ""
+        self.video_duration = 0
         self.cap = None
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
@@ -48,7 +55,6 @@ class BlinkDetectorApp(QWidget):
         self.EYE_AR_CONSEC_FRAMES = 3
         self.COUNTER = 0
         self.TOTAL = 0
-        self.start_time = None
         self.total_frames = 0
 
     def delete_existing_output(self):
@@ -133,7 +139,7 @@ class BlinkDetectorApp(QWidget):
         self.delete_existing_output()
         self.cap = cv2.VideoCapture(self.video_path)
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.start_time = time.time()
+        self.video_duration = get_video_length(self.video_path)
         self.timer.start(30)  # Update every 30 ms
 
     def update_frame(self):
@@ -158,13 +164,18 @@ class BlinkDetectorApp(QWidget):
             rightEAR = eye_aspect_ratio(rightEye)
             ear = (leftEAR + rightEAR) / 2.0
 
-            cv2.putText(frame, f"Blinks: {self.TOTAL}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            cv2.putText(frame, f"EAR: {ear:.2f}", (300, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
             leftEyeHull = cv2.convexHull(leftEye)
             rightEyeHull = cv2.convexHull(rightEye)
             cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
             cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
+
+            current_time = round((current_frame / self.total_frames) * self.video_duration)
+            minutes, seconds = divmod(current_time, 60)
+            time_str = f"{minutes:02d}:{seconds:02d}"
+            cv2.putText(frame, f"Time: {time_str}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(frame, f"EAR: {ear:.2f}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(frame, f"Blinks: {self.TOTAL}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
             if ear < self.EYE_AR_THRESH:
                 self.COUNTER += 1
@@ -184,10 +195,7 @@ class BlinkDetectorApp(QWidget):
         new_height = int(new_width * aspect_ratio)
         resized_frame = cv2.resize(frame, (new_width, new_height))
 
-        # current_time = int(time.time() - self.start_time)
-        # minutes, seconds = divmod(current_time, 60)
-        # time_str = f"{minutes:02d}:{seconds:02d}"
-        # cv2.putText(resized_frame, f"Time: {time_str}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
 
         h, w, ch = resized_frame.shape
         bytes_per_line = ch * w
