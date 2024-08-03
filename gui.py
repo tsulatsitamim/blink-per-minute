@@ -12,6 +12,8 @@ import os
 import time
 import shutil
 import subprocess
+import csv
+from collections import deque
 
 from moviepy.editor import VideoFileClip
 
@@ -56,6 +58,10 @@ class BlinkDetectorApp(QWidget):
         self.COUNTER = 0
         self.TOTAL = 0
         self.total_frames = 0
+
+        self.blink_times = deque()
+        self.csv_file = None
+        self.csv_writer = None
 
     def delete_existing_output(self):
         if os.path.exists(blinks_dir):
@@ -140,12 +146,27 @@ class BlinkDetectorApp(QWidget):
         self.cap = cv2.VideoCapture(self.video_path)
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.video_duration = get_video_length(self.video_path)
-        self.timer.start(30)  # Update every 30 ms
 
+        # Initialize CSV file
+        csv_path = os.path.join(blinks_dir, 'blink_data.csv')
+        self.csv_file = open(csv_path, 'w', newline='')
+        self.csv_writer = csv.writer(self.csv_file)
+        self.csv_writer.writerow(['Time', 'Total Blinks', 'Blinks in Last 60s'])
+
+        # Update every 30 ms
+        self.timer.start(30) 
+
+    def calculate_blinks_last_60s(self, current_time):
+        while self.blink_times and current_time - self.blink_times[0] > 60:
+            self.blink_times.popleft()
+        return len(self.blink_times)
+    
     def update_frame(self):
         ret, frame = self.cap.read()
         if not ret:
             self.timer.stop()
+            if self.csv_file:
+                self.csv_file.close()
             return
         
         current_frame = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
@@ -173,9 +194,29 @@ class BlinkDetectorApp(QWidget):
             current_time = round((current_frame / self.total_frames) * self.video_duration)
             minutes, seconds = divmod(current_time, 60)
             time_str = f"{minutes:02d}:{seconds:02d}"
+
+            blink_detected = False
+            if ear < self.EYE_AR_THRESH:
+                self.COUNTER += 1
+            else:
+                if self.COUNTER >= self.EYE_AR_CONSEC_FRAMES:
+                    self.TOTAL += 1
+                    self.blink_times.append(current_time)
+                    blink_detected = True
+                self.COUNTER = 0
+
+            blinks_last_60s = self.calculate_blinks_last_60s(current_time)
+
             cv2.putText(frame, f"Time: {time_str}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             cv2.putText(frame, f"EAR: {ear:.2f}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             cv2.putText(frame, f"Blinks: {self.TOTAL}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(frame, f"Blinks (60s): {blinks_last_60s}", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+            if blink_detected:
+                self.csv_writer.writerow([time_str, self.TOTAL, blinks_last_60s])
+                timestamp = time.strftime("%Y%m%d-%H%M%S")
+                img_filename = os.path.join(blinks_dir, f"blink_{timestamp}.png")
+                cv2.imwrite(img_filename, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
 
             if ear < self.EYE_AR_THRESH:
                 self.COUNTER += 1
