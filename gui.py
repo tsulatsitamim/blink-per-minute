@@ -1,6 +1,5 @@
 import sys
 import cv2
-import numpy as np
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QLabel, QFileDialog, QSlider
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QImage, QPixmap
@@ -178,7 +177,7 @@ class BlinkDetectorApp(QWidget):
 
         for rect in rects:
             shape = self.predictor(gray, rect)
-            shape = face_utils.shape_to_np(shape)
+            shape = face_utils.shape_to_(shape)
             leftEye = shape[self.lStart:self.lEnd]
             rightEye = shape[self.rStart:self.rEnd]
             leftEAR = eye_aspect_ratio(leftEye)
