@@ -1,0 +1,1 @@
+pyinstaller --onedir --windowed --add-data=./shape_predictor_68_face_landmarks.dat:./ gui.py
