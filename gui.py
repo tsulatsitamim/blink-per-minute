@@ -146,6 +146,9 @@ class BlinkDetectorApp(QWidget):
         self.cap = cv2.VideoCapture(self.video_path)
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.video_duration = get_video_length(self.video_path)
+        self.TOTAL = 0
+        self.COUNTER = 0
+        self.blink_times = deque()
 
         # Initialize CSV file
         csv_path = os.path.join(blinks_dir, 'blink_data.csv')
