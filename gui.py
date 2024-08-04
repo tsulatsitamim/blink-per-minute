@@ -14,11 +14,12 @@ import subprocess
 import csv
 from collections import deque
 
-from moviepy.editor import VideoFileClip
-
 def get_video_length(file_path):
-    clip = VideoFileClip(file_path)
-    return clip.duration
+    video = cv2.VideoCapture(file_path)
+    fps = video.get(cv2.CAP_PROP_FPS)
+    frame_count = video.get(cv2.CAP_PROP_FRAME_COUNT)
+    duration = frame_count / fps
+    return duration
 
 def eye_aspect_ratio(eye):
     A = dist.euclidean(eye[1], eye[5])
@@ -177,7 +178,7 @@ class BlinkDetectorApp(QWidget):
 
         for rect in rects:
             shape = self.predictor(gray, rect)
-            shape = face_utils.shape_to_(shape)
+            shape = face_utils.shape_to_np(shape)
             leftEye = shape[self.lStart:self.lEnd]
             rightEye = shape[self.rStart:self.rEnd]
             leftEAR = eye_aspect_ratio(leftEye)
