@@ -5,3 +5,4 @@ blink_*
 tmp
 *.mp4
 .lxvenv
+.lx
