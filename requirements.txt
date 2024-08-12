@@ -1,6 +1,6 @@
-# PyQt5==5.15.11
-# opencv-python==4.10.0.84
-# scipy==1.14.0
-# imutils==0.5.4
-# dlib==19.24.5
-# pyinstaller==6.9.0
+PyQt5==5.15.11
+opencv-python==4.10.0.84
+scipy==1.14.0
+imutils==0.5.4
+dlib==19.24.5
+pyinstaller==6.9.0
