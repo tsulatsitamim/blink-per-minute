@@ -1,6 +1,5 @@
 import sys
 import cv2
-import numpy as np
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QLabel, QFileDialog, QSlider
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QImage, QPixmap
@@ -15,11 +14,12 @@ import subprocess
 import csv
 from collections import deque
 
-from moviepy.editor import VideoFileClip
-
 def get_video_length(file_path):
-    clip = VideoFileClip(file_path)
-    return clip.duration
+    video = cv2.VideoCapture(file_path)
+    fps = video.get(cv2.CAP_PROP_FPS)
+    frame_count = video.get(cv2.CAP_PROP_FRAME_COUNT)
+    duration = frame_count / fps
+    return duration
 
 def eye_aspect_ratio(eye):
     A = dist.euclidean(eye[1], eye[5])
@@ -146,6 +146,9 @@ class BlinkDetectorApp(QWidget):
         self.cap = cv2.VideoCapture(self.video_path)
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.video_duration = get_video_length(self.video_path)
+        self.TOTAL = 0
+        self.COUNTER = 0
+        self.blink_times = deque()
 
         # Initialize CSV file
         csv_path = os.path.join(blinks_dir, 'blink_data.csv')
@@ -168,7 +171,7 @@ class BlinkDetectorApp(QWidget):
             if self.csv_file:
                 self.csv_file.close()
             return
-        
+
         current_frame = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
         self.frame_progress_label.setText(f'Frame: {current_frame} / {self.total_frames}')
 
@@ -185,7 +188,6 @@ class BlinkDetectorApp(QWidget):
             rightEAR = eye_aspect_ratio(rightEye)
             ear = (leftEAR + rightEAR) / 2.0
 
-
             leftEyeHull = cv2.convexHull(leftEye)
             rightEyeHull = cv2.convexHull(rightEye)
             cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
@@ -198,11 +200,11 @@ class BlinkDetectorApp(QWidget):
             blink_detected = False
             if ear < self.EYE_AR_THRESH:
                 self.COUNTER += 1
-            else:
                 if self.COUNTER >= self.EYE_AR_CONSEC_FRAMES:
                     self.TOTAL += 1
                     self.blink_times.append(current_time)
                     blink_detected = True
+            else:
                 self.COUNTER = 0
 
             blinks_last_60s = self.calculate_blinks_last_60s(current_time)
@@ -218,25 +220,12 @@ class BlinkDetectorApp(QWidget):
                 img_filename = os.path.join(blinks_dir, f"blink_{timestamp}.png")
                 cv2.imwrite(img_filename, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
 
-            if ear < self.EYE_AR_THRESH:
-                self.COUNTER += 1
-            else:
-                if self.COUNTER >= self.EYE_AR_CONSEC_FRAMES:
-                    self.TOTAL += 1
-                    # Save the frame as an image when blink is detected
-                    timestamp = time.strftime("%Y%m%d-%H%M%S")
-                    img_filename = os.path.join(blinks_dir, f"blink_{timestamp}.png")
-                    cv2.imwrite(img_filename, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-                self.COUNTER = 0
-
         # Resize the frame to width 450 while maintaining aspect ratio
         height, width, _ = frame.shape
         aspect_ratio = height / width
         new_width = 900
         new_height = int(new_width * aspect_ratio)
         resized_frame = cv2.resize(frame, (new_width, new_height))
-
-
 
         h, w, ch = resized_frame.shape
         bytes_per_line = ch * w
