@@ -61,6 +61,8 @@ class BlinkDetectorApp(QWidget):
         self.TOTAL = 0
         self.total_frames = 0
         self.BETWEEN_BLINK_THRESH = 1
+        self.SKIP_FRAME_PER_SECONDS = 0
+        self.SKIP_FRAME_MODULUS = 0
         self.frame_to_skip = 0
 
         self.blink_times = deque()
@@ -125,6 +127,18 @@ class BlinkDetectorApp(QWidget):
         blink_layout.addWidget(self.blink_label)
         layout.addLayout(blink_layout)
 
+        # Frame to Skip per Seconds slider
+        skip_layout = QHBoxLayout()
+        skip_layout.addWidget(QLabel('Skip Frame:'))
+        self.skip_slider = QSlider(Qt.Horizontal)
+        self.skip_slider.setRange(0, 30)
+        self.skip_slider.setValue(0)
+        self.skip_slider.valueChanged.connect(self.update_skip_threshold)
+        skip_layout.addWidget(self.skip_slider)
+        self.skip_label = QLabel('0 fps')
+        skip_layout.addWidget(self.skip_label)
+        layout.addLayout(skip_layout)
+
         # Start button
         self.start_btn = QPushButton('Start')
         self.start_btn.clicked.connect(self.start_processing)
@@ -158,6 +172,10 @@ class BlinkDetectorApp(QWidget):
         self.BETWEEN_BLINK_THRESH = self.blink_slider.value() / 10
         self.blink_label.setText(f'{self.BETWEEN_BLINK_THRESH:.1f}s')
 
+    def update_skip_threshold(self):
+        self.SKIP_FRAME_PER_SECONDS = self.skip_slider.value()
+        self.skip_label.setText(f'{self.SKIP_FRAME_PER_SECONDS} fps')
+
     def start_processing(self):
         if not self.video_path:
             return
@@ -170,6 +188,7 @@ class BlinkDetectorApp(QWidget):
         self.COUNTER = 0
         self.blink_times = deque()
         self.frame_to_skip = 0
+        self.SKIP_FRAME_MODULUS = round(self.fps / self.SKIP_FRAME_PER_SECONDS / 0.125) * 0.125 if self.SKIP_FRAME_PER_SECONDS else 0
 
         # Initialize CSV file
         csv_path = os.path.join(blinks_dir, 'blink_data.csv')
@@ -205,8 +224,11 @@ class BlinkDetectorApp(QWidget):
                 self.csv_file.close()
             return
 
-        self.onprogress = True 
         current_frame = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+        if current_frame % self.SKIP_FRAME_MODULUS == 0:
+            ret, frame = self.cap.read()
+        
+        self.onprogress = True 
         self.frame_progress_label.setText(f'Frame: {current_frame} / {self.total_frames}')
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
