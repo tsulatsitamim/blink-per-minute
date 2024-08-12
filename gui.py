@@ -187,7 +187,6 @@ class BlinkDetectorApp(QWidget):
     
     def update_frame(self):
         while self.frame_to_skip > 0:
-            print(f"Skipping frame: {self.frame_to_skip}")
             ret, frame = self.cap.read()
             if not ret:
                 self.timer.stop()
@@ -234,13 +233,9 @@ class BlinkDetectorApp(QWidget):
 
             blink_detected = False
             if ear < self.EYE_AR_THRESH:
-                self.COUNTER += 1
-                if self.COUNTER >= self.EYE_AR_CONSEC_FRAMES:
-                    self.TOTAL += 1
-                    self.blink_times.append(current_time)
-                    blink_detected = True
-            else:
-                self.COUNTER = 0
+                self.TOTAL += 1
+                self.blink_times.append(current_time)
+                blink_detected = True
 
             blinks_last_60s = self.calculate_blinks_last_60s(current_time)
 
@@ -251,8 +246,7 @@ class BlinkDetectorApp(QWidget):
 
             if blink_detected:
                 self.csv_writer.writerow([time_str, self.TOTAL, blinks_last_60s])
-                timestamp = time.strftime("%Y%m%d-%H%M%S")
-                img_filename = os.path.join(blinks_dir, f"blink_{timestamp}.png")
+                img_filename = os.path.join(blinks_dir, f"blink_{self.TOTAL}_{f"{minutes:02d}_{seconds:02d}"}.png")
                 cv2.imwrite(img_filename, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
                 self.frame_to_skip = round(self.BETWEEN_BLINK_THRESH * self.fps)
 
