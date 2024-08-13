@@ -3,7 +3,7 @@ import cv2
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QLabel, QFileDialog, QSlider
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QImage, QPixmap
-
+import random
 from scipy.spatial import distance as dist
 from imutils import face_utils
 import dlib
@@ -36,16 +36,15 @@ else:
 blinks_dir = os.path.join(bundle_dir, 'blinks')
 os.makedirs(blinks_dir, exist_ok=True)
 
+def select_random_numbers(m, n):
+    if n > m:
+        n = m - 1
+    if n < 1:
+        return []
+    random_numbers = random.sample(range(1, m + 1), n)
+    return random_numbers
+
 class BlinkDetectorApp(QWidget):
-
-    def test(self):
-        print('test')
-        end_time = time.time()
-        time_taken_ms = (end_time - self.start_time) * 1000
-        print(f"Time taken: {time_taken_ms:.2f} ms")
-        time.sleep(3)
-        self.start_time = end_time
-
     def __init__(self):
         super().__init__()
         self.initUI()
@@ -56,7 +55,7 @@ class BlinkDetectorApp(QWidget):
         self.video_duration = 0
         self.cap = None
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.test)
+        self.timer.timeout.connect(self.update_frame)
         
         self.detector = dlib.get_frontal_face_detector()
         dat_file_path = os.path.join(bundle_dir, 'shape_predictor_68_face_landmarks.dat')
@@ -71,7 +70,7 @@ class BlinkDetectorApp(QWidget):
         self.total_frames = 0
         self.BETWEEN_BLINK_THRESH = 1
         self.PLAYBACK_SPEED = 1
-        self.SKIP_FRAME_MODULUS = 0
+        self.fps_to_skip = []
         self.frame_to_skip = 0
 
         self.blink_times = deque()
@@ -140,7 +139,7 @@ class BlinkDetectorApp(QWidget):
         skip_layout = QHBoxLayout()
         skip_layout.addWidget(QLabel('Playback Speed:'))
         self.skip_slider = QSlider(Qt.Horizontal)
-        self.skip_slider.setRange(1, 8)
+        self.skip_slider.setRange(1, 16)
         self.skip_slider.setValue(1)
         self.skip_slider.valueChanged.connect(self.update_skip_threshold)
         skip_layout.addWidget(self.skip_slider)
@@ -198,8 +197,7 @@ class BlinkDetectorApp(QWidget):
         self.blink_times = deque()
         self.frame_to_skip = 0
 
-        fps_to_skip = round(self.fps - self.fps / self.PLAYBACK_SPEED)
-        self.SKIP_FRAME_MODULUS = round(self.fps / fps_to_skip / 0.125) * 0.125 if fps_to_skip else 0
+        self.fps_to_skip = select_random_numbers(round(self.fps), round(self.fps - self.fps / self.PLAYBACK_SPEED))
 
         # Initialize CSV file
         csv_path = os.path.join(blinks_dir, 'blink_data.csv')
@@ -209,7 +207,6 @@ class BlinkDetectorApp(QWidget):
 
         # Update every 1000 / fps ms
         interval = round(1000 / self.fps / self.PLAYBACK_SPEED)
-        print(interval)
         self.timer.start(interval)
         self.start_time = time.time()
 
@@ -220,40 +217,23 @@ class BlinkDetectorApp(QWidget):
     
     
     def update_frame(self):
-        if self.onprogress == True:
-            print('skip')
-            return
-        
-        
-        # while self.frame_to_skip > 0:
-        #     ret, frame = self.cap.read()
-        #     if not ret:
-        #         self.timer.stop()
-        #         if self.csv_file:
-        #             self.csv_file.close()
-        #         return
-        #     self.frame_to_skip -= 1
-        
         ret, frame = self.cap.read()
         if not ret:
             self.timer.stop()
             if self.csv_file:
                 self.csv_file.close()
             return
+        
+        if self.frame_to_skip > 0:
+            self.frame_to_skip -= 1
+            QTimer.singleShot(0, self.update_frame)
+            return
+
 
         current_frame = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-        # if current_frame % self.SKIP_FRAME_MODULUS == 0:
-        #     print(current_frame)
-        #     print(self.SKIP_FRAME_MODULUS)
-        #     ret, frame = self.cap.read()
-        #     if not ret:
-        #         self.timer.stop()
-        #         if self.csv_file:
-        #             self.csv_file.close()
-        #         return
-
-        self.onprogress = True 
-        print(current_frame)
+        if round(current_frame % self.fps) in self.fps_to_skip:
+            QTimer.singleShot(0, self.update_frame)
+            return
 
         self.frame_progress_label.setText(f'Frame: {current_frame} / {self.total_frames}')
 
@@ -309,8 +289,6 @@ class BlinkDetectorApp(QWidget):
         bytes_per_line = ch * w
         q_image = QImage(resized_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
         self.video_label.setPixmap(QPixmap.fromImage(q_image))
-
-        self.onprogress = False
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
